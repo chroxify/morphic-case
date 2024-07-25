@@ -13,7 +13,6 @@
 	import {
 		filteredOptions,
 		filteredSettings,
-		inputValue,
 		isOptionSelectionActive,
 		isSettingSelectionActive
 	} from '$lib/store';
@@ -34,33 +33,16 @@
 	// Handle clicks on toolbar items
 	function handleToolbarItemClick(item: string) {
 		if ($isSettingSelectionActive) {
-			// Update input value when a setting is selected
-			inputValue.update((value) => {
-				const parts = value.split('@');
-				parts[parts.length - 1] = item + ':';
-				return parts.join('@');
-			});
 			isSettingSelectionActive.set(false);
 			isOptionSelectionActive.set(true);
 			filteredSettings.set([]);
 			filteredOptions.set(settingKeywords[item]);
 			inputComponentInstance.insertSpan(item, true);
 		} else if ($isOptionSelectionActive) {
-			console.log($isOptionSelectionActive, item);
-			// Update input value when an option is selected
-			inputValue.update((value) => {
-				const parts = value.split(':');
-				parts[parts.length - 1] = item + ' ';
-				return parts.join(':');
-			});
 			isOptionSelectionActive.set(false);
 			filteredOptions.set([]);
 			inputComponentInstance.insertSpan(item, false);
 		}
-
-		// Focus input field with id 'inputField'
-		const inputField = document.getElementById('inputField') as HTMLInputElement;
-		inputField.focus();
 	}
 
 	// Reactive declarations for toolbar items and dimensions

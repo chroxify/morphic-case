@@ -2,19 +2,14 @@
 	import {
 		filteredOptions,
 		filteredSettings,
-		inputValue,
 		isOptionSelectionActive,
 		isSettingSelectionActive
 	} from '$lib/store';
-	import { createEventDispatcher, tick } from 'svelte';
 
 	// Define the type for settingKeywords
 	type SettingKeywords = {
 		[key: string]: string[];
 	};
-
-	// Event dispatcher
-	const dispatch = createEventDispatcher();
 
 	// Prop for settingKeywords
 	export let settingKeywords: SettingKeywords;
@@ -25,11 +20,10 @@
 	function handleInput() {
 		if (!inputElement) return;
 		const text = inputElement.innerText;
-		inputValue.set(text);
 
+		// Get the current element selection
 		const selection = window.getSelection();
 		if (!selection || selection.rangeCount === 0) return;
-
 		const range = selection.getRangeAt(0);
 		let currentNode = range.startContainer;
 
@@ -50,6 +44,7 @@
 			// We're inside a setting span
 			const spanContent = currentSpan.textContent || '';
 			const colonIndex = spanContent.indexOf(':');
+
 			if (colonIndex !== -1) {
 				const setting = spanContent.slice(1, colonIndex); // Remove '@' and ':'
 				const optionSearch = spanContent.slice(colonIndex + 1);
@@ -63,6 +58,16 @@
 						settingKeywords[selectedSetting]?.filter((option) =>
 							option.toLowerCase().includes(optionSearch.toLowerCase())
 						) || []
+				);
+			} else {
+				// Show setting selection if there's no colon
+				selectedSetting = spanContent.slice(1);
+				isOptionSelectionActive.set(false);
+				isSettingSelectionActive.set(true);
+				filteredSettings.update(() =>
+					Object.keys(settingKeywords).filter((keyword) =>
+						keyword.toLowerCase().includes(spanContent.toLowerCase())
+					)
 				);
 			}
 		} else {
@@ -96,54 +101,10 @@
 		}
 	}
 
-	async function handleKeydown(event: KeyboardEvent) {
-		if (event.key === 'Backspace') {
-			const selection = window.getSelection();
-			if (selection && selection.rangeCount > 0) {
-				const range = selection.getRangeAt(0);
-
-				// Check if we're at the start of a text node
-				if (range.startOffset === 0) {
-					let currentNode = range.startContainer;
-
-					// If we're in a text node, move to its parent
-					if (currentNode.nodeType === Node.TEXT_NODE) {
-						currentNode = currentNode.parentNode as Node;
-					}
-
-					// Look for the previous sibling that's not empty text
-					let prevNode = currentNode.previousSibling;
-					while (
-						prevNode &&
-						prevNode.nodeType === Node.TEXT_NODE &&
-						(prevNode.textContent?.trim() || '') === ''
-					) {
-						prevNode = prevNode.previousSibling;
-					}
-
-					if (
-						prevNode &&
-						prevNode.nodeType === Node.ELEMENT_NODE &&
-						(prevNode as Element).tagName === 'SPAN'
-					) {
-						// We're right after a span, so delete it
-						event.preventDefault();
-						prevNode.remove();
-						await tick();
-						handleInput();
-					}
-					// If we're not right after a span, let the default backspace behavior happen
-				} else {
-					// We're in the middle of a text node, let the default backspace behavior happen
-				}
-			}
-		}
-	}
-
 	export function insertSpan(content: string, isSetting: boolean = true) {
-		console.log('insertSpan', content, isSetting);
 		if (!inputElement) return;
 
+		// Get the current element selection
 		const selection = window.getSelection();
 		if (!selection || selection.rangeCount === 0) return;
 
@@ -174,7 +135,7 @@
 				inputElement.appendChild(span);
 				inputElement.appendChild(htmlAfterNode);
 
-				// Move cursor inside the span
+				// Move cursor to the end of the span
 				const newRange = document.createRange();
 				if (span.firstChild && span.textContent) {
 					newRange.setStart(span.firstChild, span.textContent.length);
@@ -193,9 +154,14 @@
 			}
 
 			if (currentNode && currentNode.nodeName === 'SPAN') {
-				// Insert content into existing span
-				const textNode = document.createTextNode(content);
-				range.insertNode(textNode);
+				// Get selected setting
+				const setting = (currentNode as HTMLElement).textContent?.slice(
+					1,
+					currentNode.textContent?.indexOf(':')
+				);
+
+				// Set the span content by replacing the current span
+				(currentNode as HTMLElement).textContent = `@${setting}:${content}`;
 
 				// Make the span uneditable
 				(currentNode as HTMLElement).contentEditable = 'false';
@@ -207,8 +173,8 @@
 				selection.removeAllRanges();
 				selection.addRange(newRange);
 
-				// Insert a space after the span
-				const spaceNode = document.createTextNode(' ');
+				// Insert a space after the span (&nsbp; in unicode)
+				const spaceNode = document.createTextNode('\u00A0');
 				newRange.insertNode(spaceNode);
 				newRange.setStartAfter(spaceNode);
 				newRange.setEndAfter(spaceNode);
@@ -218,74 +184,50 @@
 				// Reset option selection state
 				isOptionSelectionActive.set(false);
 				filteredOptions.set([]);
-			} else {
-				// If not in a span, just insert the text
-				const textNode = document.createTextNode(content);
-				range.insertNode(textNode);
-				range.setStartAfter(textNode);
-				range.setEndAfter(textNode);
-				selection.removeAllRanges();
-				selection.addRange(range);
 			}
 		}
 
 		inputElement.focus();
 		handleInput();
-
-		// Dispatch event to parent component
-		dispatch('spanInserted', { content, isSetting });
 	}
-
-	inputValue.subscribe((value) => {
-		console.log(value);
-		// if (inputElement && inputElement.innerText !== value) {
-		// 	// inputElement.innerText = value;
-
-		// 	// If there is @{text}:{text} in the input, insert it as a span
-		// 	const lastAtIndex = value.lastIndexOf('@');
-		// 	if (lastAtIndex !== -1) {
-		// 		const inputTerm = value.slice(lastAtIndex + 1);
-		// 		if (inputTerm.includes(':')) {
-		// 			const [setting, option] = inputTerm.split(':');
-		// 			insertSpan(setting + ':' + option);
-		// 		}
-		// 	}
-		// }
-	});
 </script>
 
 <div class="w-full h-[40px] px-2 mt-2 flex items-center justify-center relative">
-	<!-- <input
-		id="inputField"
-		type="text"
-		class="w-full h-[40px] bg-transparent border rounded-[6px] text-foreground px-2 outline-none focus-visible:ring-1 focus-visible:ring-ring transition-all"
-		placeholder="Imagine..."
-		on:input={handleInput}
-		bind:value={$inputValue}
-	/> -->
 	<div
 		tabindex="0"
 		bind:this={inputElement}
 		contenteditable="true"
-		class="w-full h-[40px] text-sm bg-transparent border rounded-[6px] text-foreground px-2 overflow-y-auto outline-none transition-all relative input-content"
+		class="w-full h-[40px] text-sm bg-transparent border no-scrollbar rounded-[6px] text-foreground px-2 scroll-px-2 outline-none transition-all relative input-content"
 		on:input={handleInput}
-		on:keydown={handleKeydown}
+		on:keydown={(e) => {
+			if (e.key === 'Enter') {
+				e.preventDefault();
+			}
+		}}
 		role="textbox"
-		aria-multiline="true"
+		aria-multiline="false"
 		data-placeholder="Imagine..."
 	></div>
 </div>
 
 <style>
 	.input-content {
-		white-space: pre-wrap;
-		word-break: break-word;
-		padding-top: 8.5px; /* Use padding as display flex breaks something with the cursor */
+		white-space: nowrap;
+		overflow-x: auto;
+		overflow-y: hidden;
+		padding-top: 8.5px;
+		-ms-overflow-style: none; /* IE and Edge */
+		scrollbar-width: none; /* Firefox */
 	}
 
+	.input-content::-webkit-scrollbar {
+		display: none;
+	}
+
+	/* Placeholder */
 	.input-content:empty::before {
 		content: attr(data-placeholder);
-		color: #888;
+		color: hsl(var(--muted-foreground));
 		pointer-events: none;
 		position: absolute;
 		top: 0;
